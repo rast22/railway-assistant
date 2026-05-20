@@ -1,11 +1,8 @@
 package bot
 
 import (
-	"crypto/subtle"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +20,6 @@ type Handler struct {
 	Telegram   services.TelegramSender
 	Dispatcher *notifications.Dispatcher
 	Admins     map[int64]bool
-	Secret     string
 }
 
 type Update struct {
@@ -69,7 +65,6 @@ func NewHandler(store *config.Store, telegram services.TelegramSender, dispatche
 		Telegram:   telegram,
 		Dispatcher: dispatcher,
 		Admins:     AdminIDsFromEnv(),
-		Secret:     env.GetString("TELEGRAM_WEBHOOK_SECRET", ""),
 	}
 }
 
@@ -88,35 +83,6 @@ func AdminIDsFromEnv() map[int64]bool {
 		admins[id] = true
 	}
 	return admins
-}
-
-func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !h.validSecret(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if h.Store == nil || !h.Store.Ready() {
-		http.Error(w, "Config store is not ready", http.StatusServiceUnavailable)
-		return
-	}
-
-	var update Update
-	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-
-	go func() {
-		if err := h.HandleUpdate(update); err != nil {
-			log.Printf("failed to handle telegram update: %v", err)
-		}
-	}()
 }
 
 func (h Handler) HandleUpdate(update Update) error {
@@ -417,15 +383,6 @@ func (h Handler) answerCallback(callbackID, text string) error {
 
 func (h Handler) isAdmin(userID int64) bool {
 	return len(h.Admins) > 0 && h.Admins[userID]
-}
-
-func (h Handler) validSecret(r *http.Request) bool {
-	expected := strings.TrimSpace(h.Secret)
-	if expected == "" {
-		return false
-	}
-	actual := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
-	return subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) == 1
 }
 
 func parseCommand(text string) (string, []string, bool) {

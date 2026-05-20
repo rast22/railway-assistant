@@ -90,8 +90,6 @@ func TestStoreRejectsMalformedConfig(t *testing.T) {
 
 func TestNewStoreFromEnvRequiresDurablePathForBotManagement(t *testing.T) {
 	t.Setenv("ADMIN_TELEGRAM_USER_IDS", "42")
-	t.Setenv("TELEGRAM_WEBHOOK_SECRET", "")
-	t.Setenv("PUBLIC_BASE_URL", "")
 	t.Setenv("CONFIG_PATH", "")
 	t.Setenv("RAILWAY_VOLUME_MOUNT_PATH", "")
 

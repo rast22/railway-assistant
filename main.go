@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"railway-assistant/bot"
 	"railway-assistant/config"
 	"railway-assistant/env"
 	"railway-assistant/notifications"
@@ -16,19 +17,15 @@ func main() {
 	}
 
 	telegram := services.NewTelegramAPIFromEnv()
-	if env.GetString("PUBLIC_BASE_URL", "") != "" {
-		if err := telegram.SetWebhook(env.GetString("PUBLIC_BASE_URL", ""), env.GetString("TELEGRAM_WEBHOOK_SECRET", "")); err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("Telegram webhook registered at %s/telegram/webhook", env.GetString("PUBLIC_BASE_URL", ""))
-	}
 
 	dispatcher := notifications.NewDispatcher(store, telegram)
+	botHandler := bot.NewHandler(store, telegram, dispatcher)
+	bot.StartPolling(telegram, botHandler)
+
 	app := &application{
 		port:           env.GetString("PORT", "8080"),
 		store:          store,
 		configRequired: config.ManagedConfigEnabledFromEnv(),
-		telegram:       telegram,
 		dispatcher:     dispatcher,
 	}
 	mux := app.mount()

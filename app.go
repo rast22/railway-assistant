@@ -3,11 +3,9 @@ package main
 import (
 	"log"
 	"net/http"
-	"railway-assistant/bot"
 	"railway-assistant/config"
 	"railway-assistant/handlers"
 	"railway-assistant/notifications"
-	"railway-assistant/services"
 	"time"
 )
 
@@ -15,7 +13,6 @@ type application struct {
 	port           string
 	store          *config.Store
 	configRequired bool
-	telegram       *services.TelegramAPI
 	dispatcher     *notifications.Dispatcher
 }
 
@@ -27,7 +24,6 @@ func (app *application) mount() http.Handler {
 	r.Handle("/favicon.ico", http.HandlerFunc(handlers.FaviconHandler))
 	r.Handle("/health", handlers.NewHealthHandler(app.store, app.configRequired))
 	r.Handle("/railway/alerts", handlers.NewRailwayHandler(app.store, app.dispatcher))
-	r.Handle("/telegram/webhook", bot.NewHandler(app.store, app.telegram, app.dispatcher))
 
 	return Chain(r, RequestID, RealIP, Logger, Recoverer)
 }

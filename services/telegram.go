@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"railway-assistant/env"
 )
+
+const telegramHTTPTimeout = 35 * time.Second
 
 type TelegramMessage struct {
 	Text        string
@@ -29,10 +34,16 @@ type TelegramAPI struct {
 	Client   *http.Client
 }
 
+type telegramAPIResponse struct {
+	OK          bool              `json:"ok"`
+	Result      []json.RawMessage `json:"result"`
+	Description string            `json:"description"`
+}
+
 func NewTelegramAPIFromEnv() *TelegramAPI {
 	return &TelegramAPI{
 		BotToken: env.GetString("TELEGRAM_BOT_TOKEN", ""),
-		Client:   http.DefaultClient,
+		Client:   &http.Client{Timeout: telegramHTTPTimeout},
 	}
 }
 
@@ -150,25 +161,63 @@ func (api *TelegramAPI) AnswerCallbackQuery(callbackID, text string) error {
 	return nil
 }
 
-func (api *TelegramAPI) SetWebhook(publicBaseURL, secret string) error {
+func (api *TelegramAPI) GetUpdates(offset int64, timeoutSeconds int) ([]json.RawMessage, error) {
+	if api == nil || strings.TrimSpace(api.BotToken) == "" {
+		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN is not set")
+	}
+
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 20
+	}
+
+	values := url.Values{}
+	values.Set("timeout", strconv.Itoa(timeoutSeconds))
+	values.Set("allowed_updates", `["message","callback_query"]`)
+	if offset > 0 {
+		values.Set("offset", strconv.FormatInt(offset, 10))
+	}
+
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?%s", api.BotToken, values.Encode())
+
+	client := api.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("telegram api returned status: %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	var parsed telegramAPIResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, err
+	}
+	if !parsed.OK {
+		return nil, fmt.Errorf("telegram api returned ok=false: %s", parsed.Description)
+	}
+
+	return parsed.Result, nil
+}
+
+func (api *TelegramAPI) DeleteWebhook(dropPendingUpdates bool) error {
 	if api == nil || strings.TrimSpace(api.BotToken) == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN is not set")
 	}
 
-	publicBaseURL = strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
-	if publicBaseURL == "" {
-		return fmt.Errorf("PUBLIC_BASE_URL is not set")
-	}
-	if strings.TrimSpace(secret) == "" {
-		return fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is not set")
-	}
-
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook", api.BotToken)
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/deleteWebhook", api.BotToken)
 	payload := map[string]interface{}{
-		"url":                  publicBaseURL + "/telegram/webhook",
-		"secret_token":         secret,
-		"drop_pending_updates": false,
-		"allowed_updates":      []string{"message", "callback_query"},
+		"drop_pending_updates": dropPendingUpdates,
 	}
 
 	body, err := json.Marshal(payload)
@@ -181,7 +230,7 @@ func (api *TelegramAPI) SetWebhook(publicBaseURL, secret string) error {
 		client = http.DefaultClient
 	}
 
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(body))
+	resp, err := client.Post(apiURL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}

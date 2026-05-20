@@ -9,6 +9,7 @@ A production-ready webhook service designed to integrate Railway with Telegram. 
 - **Real-time Notifications**: Get instant alerts for deployments, build failures, and service crashes via Telegram and Slack.
 - **Project Routing**: Route each Railway project to different Telegram destinations.
 - **Bot-managed Settings**: Configure routes from Telegram using `/projects`, `/connect`, `/routes`, `/disconnect`, and `/test`.
+- **Telegram Polling Mode**: Manage settings through Telegram long polling, without exposing a Telegram webhook endpoint.
 - **Durable Config**: Store routing settings in a JSON config file on a Railway Volume, preserving settings across redeploys.
 - **Smart Formatting**: Messages are cleanly formatted with Markdown, including status emojis and direct links to your Railway projects, services, and deployments.
 - **Configurable Detail**: Control exactly what information is included in your notifications (Workspace, Branch, Commit, Author, etc.).
@@ -57,13 +58,12 @@ Runtime secrets and startup options are configured via environment variables. Pr
 | `PORT`                    | The port to listen on (default: `8080`).         |
 | `TELEGRAM_BOT_TOKEN`      | The API token you got from BotFather.            |
 | `ADMIN_TELEGRAM_USER_IDS` | Comma-separated Telegram user IDs allowed to manage routes. |
-| `TELEGRAM_WEBHOOK_SECRET` | Secret used to verify Telegram webhook delivery. |
 
 **Recommended:**
 
 | Variable                | Description |
 | :---------------------- | :---------- |
-| `PUBLIC_BASE_URL`       | Public service URL. If set, the app registers `/telegram/webhook` on startup. |
+| `TELEGRAM_POLLING_ENABLED` | Keep as `true` to manage routes through Telegram polling. |
 | `RAILWAY_WEBHOOK_TOKEN` | Optional shared secret for Railway webhooks. Send it as `X-Railway-Webhook-Token` or `?token=...`. |
 | `CONFIG_PATH`           | Optional explicit config path. Defaults to the Railway Volume path above. |
 
@@ -93,17 +93,14 @@ Control what information appears in your alerts by setting these to `true` or `f
 1.  **Deploy this template** to your own Railway project.
 2.  Attach a Railway Volume if you are using bot-managed routing.
 3.  Set the required Environment Variables in your new service.
-4.  If `PUBLIC_BASE_URL` is not set, manually register the Telegram webhook at:
-    - `https://<YOUR_SERVICE_URL>/telegram/webhook`
-    - Include `secret_token=<TELEGRAM_WEBHOOK_SECRET>` in the Telegram `setWebhook` call.
-5.  Send `/status` to the bot in private chat. It should show config and route counts.
-6.  Add a Railway webhook for each project:
+4.  Send `/status` to the bot in private chat. It should show config and route counts.
+5.  Add a Railway webhook for each project:
     - **Payload URL**: `https://<YOUR_SERVICE_URL>/railway/alerts`
     - If `RAILWAY_WEBHOOK_TOKEN` is set, use `https://<YOUR_SERVICE_URL>/railway/alerts?token=<TOKEN>` or configure the `X-Railway-Webhook-Token` header.
     - **Event Types**: Select the events you want to be notified about.
-7.  Trigger Railway's test webhook, then send `/projects` to the bot.
-8.  In the target Telegram group, run `/connect <project_id>`. For channels, run `/connect <project_id> <channel_chat_id>` in private chat after adding the bot as a channel admin.
-9.  Run `/test <project_id>` to verify delivery.
+6.  Trigger Railway's test webhook, then send `/projects` to the bot.
+7.  In the target Telegram group, run `/connect <project_id>`. For channels, run `/connect <project_id> <channel_chat_id>` in private chat after adding the bot as a channel admin.
+8.  Run `/test <project_id>` to verify delivery.
 
 Bot commands:
 

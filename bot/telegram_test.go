@@ -1,8 +1,6 @@
 package bot
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,7 +37,6 @@ func TestBotRejectsUnauthorizedUser(t *testing.T) {
 		Store:    store,
 		Telegram: sender,
 		Admins:   map[int64]bool{42: true},
-		Secret:   "secret",
 	}
 
 	err := handler.HandleUpdate(Update{Message: &Message{
@@ -55,30 +52,6 @@ func TestBotRejectsUnauthorizedUser(t *testing.T) {
 	}
 	if !strings.Contains(sender.messages[0].message.Text, "Unauthorized") {
 		t.Fatalf("message text = %q, want unauthorized", sender.messages[0].message.Text)
-	}
-}
-
-func TestBotWebhookRequiresTelegramSecret(t *testing.T) {
-	handler := Handler{
-		Store:    newBotTestStore(t),
-		Telegram: &botTelegramSender{},
-		Admins:   map[int64]bool{42: true},
-		Secret:   "secret",
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/telegram/webhook", strings.NewReader(`{}`))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status without secret = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/telegram/webhook", strings.NewReader(`{}`))
-	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "secret")
-	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status with secret = %d, want %d", rec.Code, http.StatusOK)
 	}
 }
 
@@ -99,7 +72,6 @@ func TestBotProjectsConnectRoutesDisconnectAndTest(t *testing.T) {
 		Telegram:   sender,
 		Dispatcher: dispatcher,
 		Admins:     map[int64]bool{42: true},
-		Secret:     "secret",
 	}
 
 	updates := []Update{
@@ -149,7 +121,6 @@ func TestBotPrivateConnectWithExplicitChatID(t *testing.T) {
 		Store:    store,
 		Telegram: sender,
 		Admins:   map[int64]bool{42: true},
-		Secret:   "secret",
 	}
 
 	err := handler.HandleUpdate(Update{Message: &Message{

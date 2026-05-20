@@ -79,9 +79,7 @@ type Snapshot struct {
 }
 
 func ManagedConfigEnabledFromEnv() bool {
-	return strings.TrimSpace(env.GetString("ADMIN_TELEGRAM_USER_IDS", "")) != "" ||
-		strings.TrimSpace(env.GetString("TELEGRAM_WEBHOOK_SECRET", "")) != "" ||
-		strings.TrimSpace(env.GetString("PUBLIC_BASE_URL", "")) != ""
+	return strings.TrimSpace(env.GetString("ADMIN_TELEGRAM_USER_IDS", "")) != ""
 }
 
 func ResolvePathFromEnv() (string, bool) {
