@@ -6,8 +6,12 @@ import (
 )
 
 func GetStatusEmoji(payload types.RailwayAlert) string {
-	status := strings.ToUpper(payload.Details.Status)
-	severity := strings.ToUpper(payload.Severity)
+	return GetNotificationStatusEmoji(types.RailwayAlertToNotificationEvent(payload))
+}
+
+func GetNotificationStatusEmoji(event types.NotificationEvent) string {
+	status := strings.ToUpper(event.Status)
+	severity := strings.ToUpper(event.Severity)
 
 	if status == "SUCCESS" {
 		return "🟢"
@@ -22,7 +26,7 @@ func GetStatusEmoji(payload types.RailwayAlert) string {
 		return "🔵"
 	}
 
-	eventType := strings.ToLower(payload.Type)
+	eventType := strings.ToLower(event.Type)
 	if strings.Contains(eventType, "fail") || strings.Contains(eventType, "error") || strings.Contains(eventType, "crash") {
 		return "🔴"
 	}

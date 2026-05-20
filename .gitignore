@@ -12,3 +12,6 @@ mock-alert.json
 # Go specific
 go.sum
 vendor/
+
+# IDE
+.idea/

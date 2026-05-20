@@ -1,23 +1,40 @@
 package handlers
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
 
+	"railway-assistant/config"
+	"railway-assistant/env"
+	"railway-assistant/notifications"
 	"railway-assistant/services"
 	"railway-assistant/types"
 	"railway-assistant/utils"
 )
 
+type RailwayHandler struct {
+	Store      *config.Store
+	Dispatcher *notifications.Dispatcher
+}
+
+func NewRailwayHandler(store *config.Store, dispatcher *notifications.Dispatcher) RailwayHandler {
+	return RailwayHandler{Store: store, Dispatcher: dispatcher}
+}
+
 func RailwayAlertsHandler(w http.ResponseWriter, r *http.Request) {
+	NewRailwayHandler(nil, notifications.NewDispatcher(nil, services.NewTelegramAPIFromEnv())).ServeHTTP(w, r)
+}
+
+func (h RailwayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	if !utils.IsAtLeastOneProviderEnabled() {
-		http.Error(w, "At least one notification provider must be enabled", http.StatusBadRequest)
+	if !validRailwayToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -41,9 +58,20 @@ func RailwayAlertsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		if utils.IsTelegramEnabled() {
-			message, deployURL := utils.PrepareTelegramMessage(payload)
-			if err := services.SendTelegramMessage(message, deployURL); err != nil {
+		event := types.RailwayAlertToNotificationEvent(payload)
+		if h.Store != nil {
+			if err := h.Store.UpsertKnownProject(config.KnownProject{
+				ID:       event.SourceID,
+				Provider: event.Provider,
+				Name:     event.SourceName,
+			}); err != nil {
+				log.Printf("Failed to record railway project: %v\n", err)
+			}
+		}
+
+		if h.Dispatcher != nil {
+			result := h.Dispatcher.DispatchTelegram(event)
+			for _, err := range result.Errors {
 				log.Printf("Failed to send telegram message: %v\n", err)
 			}
 		}
@@ -55,4 +83,18 @@ func RailwayAlertsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+}
+
+func validRailwayToken(r *http.Request) bool {
+	expected := env.GetString("RAILWAY_WEBHOOK_TOKEN", "")
+	if expected == "" {
+		return true
+	}
+
+	actual := r.Header.Get("X-Railway-Webhook-Token")
+	if actual == "" {
+		actual = r.URL.Query().Get("token")
+	}
+
+	return subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) == 1
 }
