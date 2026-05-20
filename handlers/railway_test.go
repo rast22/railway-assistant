@@ -99,6 +99,85 @@ func TestRailwayHandlerAcceptsValidPayloadWithoutRoute(t *testing.T) {
 	}
 }
 
+func TestRailwayHandlerRecordsProjectFromQueryFallback(t *testing.T) {
+	t.Setenv("RAILWAY_WEBHOOK_TOKEN", "")
+	t.Setenv("TELEGRAM_CHAT_ID", "")
+	t.Setenv("SLACK_ENABLED", "false")
+
+	store, err := config.NewStore(filepath.Join(t.TempDir(), "config.json"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	handler := NewRailwayHandler(store, nil)
+	req := httptest.NewRequest(http.MethodPost, "/railway/alerts?project_id=query-project&project_name=Query%20Project", strings.NewReader(`{"type":"test"}`))
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	project, ok := store.KnownProject(config.ProviderRailway, "query-project")
+	if !ok {
+		t.Fatal("query fallback project was not recorded")
+	}
+	if project.Name != "Query Project" {
+		t.Fatalf("project name = %q, want Query Project", project.Name)
+	}
+}
+
+func TestRailwayHandlerRecordsProjectFromTopLevelPayloadFallback(t *testing.T) {
+	t.Setenv("RAILWAY_WEBHOOK_TOKEN", "")
+	t.Setenv("TELEGRAM_CHAT_ID", "")
+	t.Setenv("SLACK_ENABLED", "false")
+
+	store, err := config.NewStore(filepath.Join(t.TempDir(), "config.json"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	handler := NewRailwayHandler(store, nil)
+	req := httptest.NewRequest(http.MethodPost, "/railway/alerts", strings.NewReader(`{"type":"test","projectId":"top-project","projectName":"Top Project"}`))
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	project, ok := store.KnownProject(config.ProviderRailway, "top-project")
+	if !ok {
+		t.Fatal("top-level fallback project was not recorded")
+	}
+	if project.Name != "Top Project" {
+		t.Fatalf("project name = %q, want Top Project", project.Name)
+	}
+}
+
+func TestRailwayHandlerSupportsRailwayTestWebhookPreflight(t *testing.T) {
+	t.Setenv("RAILWAY_WEBHOOK_TOKEN", "secret")
+
+	handler := NewRailwayHandler(nil, nil)
+	req := httptest.NewRequest(http.MethodOptions, "/railway/alerts?token=secret", nil)
+	req.Header.Set("Origin", "https://railway.com")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want *", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, http.MethodPost) {
+		t.Fatalf("Access-Control-Allow-Methods = %q, want POST", got)
+	}
+}
+
 func TestRailwayHandlerRejectsInvalidRequests(t *testing.T) {
 	t.Setenv("RAILWAY_WEBHOOK_TOKEN", "secret")
 	t.Setenv("TELEGRAM_CHAT_ID", "")

@@ -76,10 +76,10 @@ func TestBotProjectsConnectRoutesDisconnectAndTest(t *testing.T) {
 
 	updates := []Update{
 		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/projects"}},
-		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: -1001, Type: "supergroup", Title: "Deployments"}, Text: "/connect project-1"}},
+		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/connect project-1 -1001 Deployments"}},
 		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/routes"}},
 		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/test project-1"}},
-		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: -1001, Type: "supergroup", Title: "Deployments"}, Text: "/disconnect project-1"}},
+		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/disconnect project-1 -1001"}},
 	}
 
 	for _, update := range updates {
@@ -135,6 +135,32 @@ func TestBotPrivateConnectWithExplicitChatID(t *testing.T) {
 	destinations := store.TelegramDestinations(config.ProviderRailway, "project-1")
 	if len(destinations) != 1 || destinations[0].ChatID != "-1001" {
 		t.Fatalf("destinations = %#v, want chat -1001", destinations)
+	}
+}
+
+func TestBotConnectRequiresExplicitChatID(t *testing.T) {
+	store := newBotTestStore(t)
+	sender := &botTelegramSender{}
+	handler := Handler{
+		Store:    store,
+		Telegram: sender,
+		Admins:   map[int64]bool{42: true},
+	}
+
+	err := handler.HandleUpdate(Update{Message: &Message{
+		From: &User{ID: 42},
+		Chat: Chat{ID: -1001, Type: "supergroup", Title: "Deployments"},
+		Text: "/connect project-1",
+	}})
+	if err != nil {
+		t.Fatalf("HandleUpdate() error = %v", err)
+	}
+
+	if destinations := store.TelegramDestinations(config.ProviderRailway, "project-1"); len(destinations) != 0 {
+		t.Fatalf("destinations = %#v, want none", destinations)
+	}
+	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0].message.Text, "/connect <project_id> <chat_id>") {
+		t.Fatalf("usage reply = %#v", sender.messages)
 	}
 }
 

@@ -261,28 +261,21 @@ func (h Handler) sendRoutes(chatID string) error {
 }
 
 func (h Handler) connect(replyChatID string, chat Chat, adminID int64, args []string) error {
-	if len(args) == 0 {
-		return h.reply(replyChatID, "Usage: /connect <project_id>. In private chat, use /connect <project_id> <chat_id>.")
+	if len(args) < 2 {
+		return h.reply(replyChatID, "Usage: /connect <project_id> <chat_id> [label]. Run this from your private admin chat with the bot.")
 	}
 
 	sourceID := args[0]
-	destinationChatID := chatIDString(chat.ID)
-	destinationLabel := chatLabel(chat)
-	destinationType := chat.Type
-
-	if chat.Type == "private" {
-		if len(args) < 2 {
-			return h.reply(replyChatID, "Run /connect <project_id> inside the target group/channel, or paste a target chat ID with /connect <project_id> <chat_id>.")
-		}
-		destinationChatID = args[1]
-		destinationLabel = "Chat " + args[1]
-		destinationType = "manual"
+	destinationChatID := args[1]
+	destinationLabel := "Chat " + destinationChatID
+	if len(args) > 2 {
+		destinationLabel = strings.Join(args[2:], " ")
 	}
 
 	destination := config.TelegramDestination{
 		ChatID:           destinationChatID,
 		Label:            destinationLabel,
-		ChatType:         destinationType,
+		ChatType:         "manual",
 		CreatedByAdminID: adminID,
 	}
 	if _, err := h.Store.ConnectTelegramDestination(config.ProviderRailway, sourceID, destination, adminID); err != nil {
@@ -298,17 +291,12 @@ func (h Handler) connect(replyChatID string, chat Chat, adminID int64, args []st
 }
 
 func (h Handler) disconnect(replyChatID string, chat Chat, args []string) error {
-	if len(args) == 0 {
-		return h.reply(replyChatID, "Usage: /disconnect <project_id>. In private chat this removes the whole project route unless you add a chat ID.")
+	if len(args) < 2 {
+		return h.reply(replyChatID, "Usage: /disconnect <project_id> <chat_id>.")
 	}
 
 	sourceID := args[0]
-	chatID := ""
-	if chat.Type != "private" {
-		chatID = chatIDString(chat.ID)
-	} else if len(args) > 1 {
-		chatID = args[1]
-	}
+	chatID := args[1]
 
 	removed, err := h.Store.DisconnectTelegramDestination(config.ProviderRailway, sourceID, chatID)
 	if err != nil {
@@ -406,9 +394,8 @@ Railway Assistant commands
 /status - show configuration status
 /projects - list Railway projects seen from webhooks
 /routes - list configured routes
-/connect <project_id> - connect this chat to a project
-/connect <project_id> <chat_id> - connect a chat from private chat
-/disconnect <project_id> - remove this chat, or the whole route in private chat
+/connect <project_id> <chat_id> [label] - connect a project to a Telegram chat
+/disconnect <project_id> <chat_id> - remove a Telegram chat from a project
 /test <project_id> - send a test notification
 `)
 }

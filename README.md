@@ -96,10 +96,11 @@ Control what information appears in your alerts by setting these to `true` or `f
 4.  Send `/status` to the bot in private chat. It should show config and route counts.
 5.  Add a Railway webhook for each project:
     - **Payload URL**: `https://<YOUR_SERVICE_URL>/railway/alerts`
-    - If `RAILWAY_WEBHOOK_TOKEN` is set, use `https://<YOUR_SERVICE_URL>/railway/alerts?token=<TOKEN>` or configure the `X-Railway-Webhook-Token` header.
+    - If Railway test payloads do not show up in `/projects`, use `https://<YOUR_SERVICE_URL>/railway/alerts?project_id=<PROJECT_ID>&project_name=<PROJECT_NAME>`.
+    - If `RAILWAY_WEBHOOK_TOKEN` is set, use `https://<YOUR_SERVICE_URL>/railway/alerts?token=<TOKEN>&project_id=<PROJECT_ID>` or configure the `X-Railway-Webhook-Token` header.
     - **Event Types**: Select the events you want to be notified about.
-6.  Trigger Railway's test webhook, then send `/projects` to the bot.
-7.  In the target Telegram group, run `/connect <project_id>`. For channels, run `/connect <project_id> <channel_chat_id>` in private chat after adding the bot as a channel admin.
+6.  Trigger Railway's test webhook, then send `/projects` to the bot. The test button is sent from Railway's browser UI, so use the `?token=...` URL form when testing with `RAILWAY_WEBHOOK_TOKEN`.
+7.  In private chat with the bot, run `/connect <project_id> <chat_id> [label]` for each project/chat pair.
 8.  Run `/test <project_id>` to verify delivery.
 
 Bot commands:
@@ -109,9 +110,8 @@ Bot commands:
 | `/status` | Show config path and counts. |
 | `/projects` | List Railway projects seen from webhooks. |
 | `/routes` | List configured routes. |
-| `/connect <project_id>` | Connect the current group or supergroup to a project. |
-| `/connect <project_id> <chat_id>` | Connect a chat or channel from private chat. |
-| `/disconnect <project_id>` | Disconnect the current group, or remove the whole project route in private chat. |
+| `/connect <project_id> <chat_id> [label]` | Connect a Railway project to a Telegram chat/channel. |
+| `/disconnect <project_id> <chat_id>` | Remove a Telegram chat/channel from a project route. |
 | `/test <project_id>` | Send a test notification through the route. |
 
 ## License
