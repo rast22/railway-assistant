@@ -14,9 +14,10 @@ func PrepareTelegramNotificationMessage(event types.NotificationEvent) (string, 
 	var sb strings.Builder
 	emoji := GetNotificationStatusEmoji(event)
 
-	sb.WriteString("🚄 *Railway Alert*\n\n")
+	sb.WriteString(notificationTelegramTitle(event))
+	sb.WriteString("\n\n")
 
-	eventType := strings.ToUpper(FormatEventType(event.Type))
+	eventType := strings.ToUpper(notificationEventType(event))
 	sb.WriteString(fmt.Sprintf("%s *%s*\n\n", emoji, EscapeMarkdown(eventType)))
 
 	sb.WriteString("*Details*\n")
@@ -85,6 +86,34 @@ func PrepareTelegramNotificationMessage(event types.NotificationEvent) (string, 
 	}
 
 	return sb.String(), event.DeploymentURL
+}
+
+func notificationTelegramTitle(event types.NotificationEvent) string {
+	switch event.Provider {
+	case types.ProviderCloudflare:
+		return "☁️ *Cloudflare Workers Build*"
+	default:
+		return "🚄 *Railway Alert*"
+	}
+}
+
+func notificationEventType(event types.NotificationEvent) string {
+	if event.Provider != types.ProviderCloudflare {
+		return FormatEventType(event.Type)
+	}
+
+	switch event.Type {
+	case types.CloudflareWorkersBuildStarted:
+		return "Build Started"
+	case types.CloudflareWorkersBuildSucceeded:
+		return "Build Succeeded"
+	case types.CloudflareWorkersBuildFailed:
+		return "Build Failed"
+	case types.CloudflareWorkersBuildCanceled, types.CloudflareWorkersBuildCancelled:
+		return "Build Cancelled"
+	default:
+		return FormatEventType(strings.TrimPrefix(event.Type, "cf.workersBuilds.worker."))
+	}
 }
 
 func EscapeMarkdown(text string) string {

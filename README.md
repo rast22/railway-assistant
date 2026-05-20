@@ -2,12 +2,12 @@
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/railway-assistant?referralCode=1uJ_oA)
 
-A production-ready webhook service designed to integrate Railway with Telegram. It acts as a bridge, receiving webhook events from your Railway projects and forwarding them as formatted notifications to one or more Telegram chats, groups, or channels per Railway project.
+A production-ready webhook service designed to integrate Railway and Cloudflare Workers Builds with Telegram. It acts as a bridge, receiving webhook events from your Railway projects and forwarded Cloudflare Workers build events, then sending formatted notifications to one or more Telegram chats, groups, or channels per source.
 
 ## Features
 
 - **Real-time Notifications**: Get instant alerts for deployments, build failures, and service crashes via Telegram and Slack.
-- **Project Routing**: Route each Railway project to different Telegram destinations.
+- **Project Routing**: Route each Railway project or Cloudflare Worker to different Telegram destinations.
 - **Bot-managed Settings**: Configure routes from Telegram using `/projects`, `/connect`, `/routes`, `/disconnect`, and `/test`.
 - **Telegram Polling Mode**: Manage settings through Telegram long polling, without exposing a Telegram webhook endpoint.
 - **Durable Config**: Store routing settings in a JSON config file on a Railway Volume, preserving settings across redeploys.
@@ -65,6 +65,7 @@ Runtime secrets and startup options are configured via environment variables. Pr
 | :---------------------- | :---------- |
 | `TELEGRAM_POLLING_ENABLED` | Keep as `true` to manage routes through Telegram polling. |
 | `RAILWAY_WEBHOOK_TOKEN` | Optional shared secret for Railway webhooks. Send it as `X-Railway-Webhook-Token` or `?token=...`. |
+| `CLOUDFLARE_WEBHOOK_TOKEN` | Optional shared secret for forwarded Cloudflare Workers Builds events. |
 | `CONFIG_PATH`           | Optional explicit config path. Defaults to the Railway Volume path above. |
 
 **Legacy / Optional Provider Settings:**
@@ -103,16 +104,58 @@ Control what information appears in your alerts by setting these to `true` or `f
 7.  In private chat with the bot, run `/connect <project_id> <chat_id> [label]` for each project/chat pair.
 8.  Run `/test <project_id>` to verify delivery.
 
+### 5. Cloudflare Workers Builds
+
+Cloudflare Workers Builds events are delivered through Cloudflare Event Subscriptions to a Queue. Deploy a small Queue consumer Worker that forwards each event body to this service.
+
+1.  Create a Cloudflare Queue.
+2.  Subscribe Workers Builds events to that Queue.
+3.  Deploy a Queue consumer Worker with this behavior:
+
+```js
+export default {
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      const response = await fetch(env.ASSISTANT_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(message.body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Assistant webhook failed: ${response.status}`);
+      }
+    }
+  },
+};
+```
+
+Set `ASSISTANT_WEBHOOK_URL` to:
+
+```text
+https://<YOUR_SERVICE_URL>/cloudflare/workers/builds?token=<CLOUDFLARE_WEBHOOK_TOKEN>
+```
+
+Then trigger a Workers build, run `/projects`, and connect the Worker to a chat:
+
+```text
+/connect cf <worker_name> <chat_id> [label]
+/test cf <worker_name>
+```
+
 Bot commands:
 
 | Command | Description |
 | :------ | :---------- |
 | `/status` | Show config path and counts. |
-| `/projects` | List Railway projects seen from webhooks. |
+| `/projects` | List Railway projects and Cloudflare Workers seen from webhooks. |
 | `/routes` | List configured routes. |
 | `/connect <project_id> <chat_id> [label]` | Connect a Railway project to a Telegram chat/channel. |
+| `/connect cf <worker_name> <chat_id> [label]` | Connect a Cloudflare Worker to a Telegram chat/channel. |
 | `/disconnect <project_id> <chat_id>` | Remove a Telegram chat/channel from a project route. |
+| `/disconnect cf <worker_name> <chat_id>` | Remove a Telegram chat/channel from a Cloudflare Worker route. |
 | `/test <project_id>` | Send a test notification through the route. |
+| `/test cf <worker_name>` | Send a Cloudflare test notification through the route. |
 
 ## License
 

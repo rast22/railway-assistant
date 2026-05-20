@@ -37,11 +37,14 @@ func (d *Dispatcher) DispatchTelegram(event types.NotificationEvent) DispatchRes
 	outgoing := services.TelegramMessage{
 		Text:       message,
 		ParseMode:  "MarkdownV2",
-		ButtonText: "View Deployment",
+		ButtonText: telegramButtonText(event),
 		ButtonURL:  deployURL,
 	}
 
-	destinations := d.Store.TelegramDestinations(event.Provider, event.SourceID)
+	var destinations []config.TelegramDestination
+	if d.Store != nil {
+		destinations = d.Store.TelegramDestinations(event.Provider, event.SourceID)
+	}
 	result.MatchedDestinations = len(destinations)
 
 	if len(destinations) == 0 {
@@ -68,4 +71,13 @@ func (d *Dispatcher) DispatchTelegram(event types.NotificationEvent) DispatchRes
 	}
 
 	return result
+}
+
+func telegramButtonText(event types.NotificationEvent) string {
+	switch event.Provider {
+	case types.ProviderCloudflare:
+		return "View Build"
+	default:
+		return "View Deployment"
+	}
 }

@@ -42,3 +42,35 @@ func TestPrepareTelegramNotificationMessageEscapesMarkdownAndKeepsButtonURL(t *t
 		}
 	}
 }
+
+func TestPrepareTelegramNotificationMessageUsesCloudflareTitle(t *testing.T) {
+	event := types.NotificationEvent{
+		Provider:      types.ProviderCloudflare,
+		SourceID:      "my-worker",
+		SourceName:    "my-worker",
+		Type:          types.CloudflareWorkersBuildSucceeded,
+		Severity:      "info",
+		ProjectName:   "my-worker",
+		ServiceName:   "my-worker-repo",
+		Status:        "success",
+		Branch:        "main",
+		CommitAuthor:  "developer@example.com",
+		CommitMessage: "Fix bug",
+	}
+
+	message, buttonURL := PrepareTelegramNotificationMessage(event)
+
+	if buttonURL != "" {
+		t.Fatalf("buttonURL = %q, want empty", buttonURL)
+	}
+	for _, want := range []string{
+		"Cloudflare Workers Build",
+		"BUILD SUCCEEDED",
+		"my\\-worker",
+		"my\\-worker\\-repo",
+	} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("message missing %q:\n%s", want, message)
+		}
+	}
+}

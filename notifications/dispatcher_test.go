@@ -92,6 +92,23 @@ func TestDispatcherUsesLegacyFallbackWhenNoRouteMatches(t *testing.T) {
 	}
 }
 
+func TestDispatcherUsesLegacyFallbackWithoutConfigStore(t *testing.T) {
+	t.Setenv("TELEGRAM_CHAT_ID", "-999")
+
+	sender := &fakeTelegramSender{}
+	result := NewDispatcher(nil, sender).DispatchTelegram(testEvent("project-1"))
+
+	if !result.UsedLegacyFallback {
+		t.Fatal("UsedLegacyFallback = false, want true")
+	}
+	if result.Sent != 1 {
+		t.Fatalf("Sent = %d, want 1", result.Sent)
+	}
+	if got := sender.chats(); len(got) != 1 || got[0] != "-999" {
+		t.Fatalf("sent chats = %#v, want [-999]", got)
+	}
+}
+
 func TestDispatcherSkipsDisabledRoutesAndDestinations(t *testing.T) {
 	t.Setenv("TELEGRAM_CHAT_ID", "")
 	path := filepath.Join(t.TempDir(), "config.json")

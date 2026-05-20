@@ -17,8 +17,9 @@ import (
 const (
 	SchemaVersion = 1
 
-	ProviderRailway  = "railway"
-	ProviderTelegram = "telegram"
+	ProviderRailway    = "railway"
+	ProviderCloudflare = "cloudflare"
+	ProviderTelegram   = "telegram"
 )
 
 var (
@@ -185,7 +186,11 @@ func (s *Store) UpsertKnownProject(project KnownProject) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	existing, exists := s.data.KnownProjects[project.ID]
+	key := KnownProjectKey(project.Provider, project.ID)
+	existing, exists := s.data.KnownProjects[key]
+	if !exists {
+		existing, exists = s.data.KnownProjects[project.ID]
+	}
 	if exists {
 		if project.Name == "" {
 			project.Name = existing.Name
@@ -194,7 +199,7 @@ func (s *Store) UpsertKnownProject(project KnownProject) error {
 			project.Provider = existing.Provider
 		}
 	}
-	s.data.KnownProjects[project.ID] = project
+	s.data.KnownProjects[key] = project
 	return s.persistLocked()
 }
 
@@ -206,7 +211,7 @@ func (s *Store) KnownProject(provider, sourceID string) (KnownProject, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	project, ok := s.data.KnownProjects[sourceID]
+	project, ok := s.data.KnownProjects[KnownProjectKey(provider, sourceID)]
 	if !ok || project.Provider != provider {
 		return KnownProject{}, false
 	}
@@ -365,6 +370,10 @@ func RouteID(provider, sourceID string) string {
 	return strings.TrimSpace(provider) + ":" + strings.TrimSpace(sourceID)
 }
 
+func KnownProjectKey(provider, sourceID string) string {
+	return RouteID(provider, sourceID)
+}
+
 func TelegramDestinationID(chatID string) string {
 	chatID = strings.TrimSpace(chatID)
 	if chatID == "" {
@@ -462,6 +471,19 @@ func normalizeData(data *Data) {
 	}
 	if data.CreatedAt.IsZero() {
 		data.CreatedAt = time.Now().UTC()
+	}
+
+	for key, project := range data.KnownProjects {
+		if project.Provider == "" {
+			project.Provider = ProviderRailway
+		}
+		normalizedKey := KnownProjectKey(project.Provider, project.ID)
+		if normalizedKey == ":" || key == normalizedKey {
+			data.KnownProjects[key] = project
+			continue
+		}
+		data.KnownProjects[normalizedKey] = project
+		delete(data.KnownProjects, key)
 	}
 }
 

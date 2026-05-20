@@ -77,6 +77,29 @@ func TestStoreDisconnectRemovesRoute(t *testing.T) {
 	}
 }
 
+func TestStoreKeepsKnownProjectsSeparateByProvider(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "config.json"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+
+	if err := store.UpsertKnownProject(KnownProject{ID: "api", Provider: ProviderRailway, Name: "Railway API"}); err != nil {
+		t.Fatalf("UpsertKnownProject(railway) error = %v", err)
+	}
+	if err := store.UpsertKnownProject(KnownProject{ID: "api", Provider: ProviderCloudflare, Name: "Cloudflare API"}); err != nil {
+		t.Fatalf("UpsertKnownProject(cloudflare) error = %v", err)
+	}
+
+	railway, ok := store.KnownProject(ProviderRailway, "api")
+	if !ok || railway.Name != "Railway API" {
+		t.Fatalf("railway project = %#v, ok=%t", railway, ok)
+	}
+	cloudflare, ok := store.KnownProject(ProviderCloudflare, "api")
+	if !ok || cloudflare.Name != "Cloudflare API" {
+		t.Fatalf("cloudflare project = %#v, ok=%t", cloudflare, ok)
+	}
+}
+
 func TestStoreRejectsMalformedConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte("{"), 0o644); err != nil {

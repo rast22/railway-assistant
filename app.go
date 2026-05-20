@@ -24,6 +24,7 @@ func (app *application) mount() http.Handler {
 	r.Handle("/favicon.ico", http.HandlerFunc(handlers.FaviconHandler))
 	r.Handle("/health", handlers.NewHealthHandler(app.store, app.configRequired))
 	r.Handle("/railway/alerts", handlers.NewRailwayHandler(app.store, app.dispatcher))
+	r.Handle("/cloudflare/workers/builds", handlers.NewCloudflareWorkersBuildsHandler(app.store, app.dispatcher))
 
 	return Chain(r, RequestID, RealIP, Logger, Recoverer)
 }

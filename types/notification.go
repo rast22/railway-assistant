@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-const ProviderRailway = "railway"
+const (
+	ProviderRailway    = "railway"
+	ProviderCloudflare = "cloudflare"
+)
 
 type NotificationEvent struct {
 	Provider             string

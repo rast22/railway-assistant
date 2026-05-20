@@ -166,7 +166,7 @@ func (h Handler) sendStatus(chatID string) error {
 	}
 
 	text := fmt.Sprintf(
-		"Railway Assistant status\n\nConfig: %s\nKnown projects: %d\nRoutes: %d\nTelegram destinations: %d",
+		"Railway Assistant status\n\nConfig: %s\nKnown sources: %d\nRoutes: %d\nTelegram destinations: %d",
 		snap.Path,
 		len(snap.KnownProjects),
 		len(snap.Routes),
@@ -181,13 +181,26 @@ func (h Handler) sendProjects(chatID string) error {
 		return err
 	}
 	if len(snap.KnownProjects) == 0 {
-		return h.reply(chatID, "No Railway projects have been seen yet. Send a Railway test webhook first, then run /projects again.")
+		return h.reply(chatID, "No Railway projects or Cloudflare Workers have been seen yet. Send a provider test webhook first, then run /projects again.")
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Known Railway projects\n\n")
-	for _, project := range snap.KnownProjects {
-		sb.WriteString(fmt.Sprintf("%s\nID: %s\n\n", project.Name, project.ID))
+	sb.WriteString("Known sources\n\n")
+	grouped := groupProjectsByProvider(snap.KnownProjects)
+	for _, provider := range []string{config.ProviderRailway, config.ProviderCloudflare} {
+		projects := grouped[provider]
+		if len(projects) == 0 {
+			continue
+		}
+		sb.WriteString(providerLabel(provider) + "\n")
+		for _, project := range projects {
+			name := project.Name
+			if name == "" {
+				name = project.ID
+			}
+			sb.WriteString(fmt.Sprintf("- %s\n  ID: %s\n", name, project.ID))
+		}
+		sb.WriteString("\n")
 	}
 
 	keyboard := make([][]map[string]string, 0, len(snap.KnownProjects))
@@ -222,7 +235,7 @@ func (h Handler) sendRoutes(chatID string) error {
 
 	projectNames := map[string]string{}
 	for _, project := range snap.KnownProjects {
-		projectNames[project.ID] = project.Name
+		projectNames[config.KnownProjectKey(project.Provider, project.ID)] = project.Name
 	}
 	destinationLabels := map[string]string{}
 	for _, destination := range snap.TelegramDestinations {
@@ -232,11 +245,11 @@ func (h Handler) sendRoutes(chatID string) error {
 	var sb strings.Builder
 	sb.WriteString("Configured routes\n\n")
 	for _, route := range snap.Routes {
-		name := projectNames[route.SourceID]
+		name := projectNames[config.KnownProjectKey(route.Provider, route.SourceID)]
 		if name == "" {
 			name = route.SourceID
 		}
-		sb.WriteString(fmt.Sprintf("%s\nProvider: %s\nEnabled: %t\n", name, route.Provider, route.Enabled))
+		sb.WriteString(fmt.Sprintf("%s\nProvider: %s\nSource ID: %s\nEnabled: %t\n", name, providerLabel(route.Provider), route.SourceID, route.Enabled))
 		if len(route.TelegramDestination) == 0 {
 			sb.WriteString("Destinations: none\n\n")
 			continue
@@ -261,15 +274,15 @@ func (h Handler) sendRoutes(chatID string) error {
 }
 
 func (h Handler) connect(replyChatID string, chat Chat, adminID int64, args []string) error {
-	if len(args) < 2 {
-		return h.reply(replyChatID, "Usage: /connect <project_id> <chat_id> [label]. Run this from your private admin chat with the bot.")
+	source, ok := parseSourceArgs(args)
+	if !ok || len(source.Rest) < 1 {
+		return h.reply(replyChatID, "Usage: /connect <project_id> <chat_id> [label] or /connect cf <worker_name> <chat_id> [label].")
 	}
 
-	sourceID := args[0]
-	destinationChatID := args[1]
+	destinationChatID := source.Rest[0]
 	destinationLabel := "Chat " + destinationChatID
-	if len(args) > 2 {
-		destinationLabel = strings.Join(args[2:], " ")
+	if len(source.Rest) > 1 {
+		destinationLabel = strings.Join(source.Rest[1:], " ")
 	}
 
 	destination := config.TelegramDestination{
@@ -278,27 +291,27 @@ func (h Handler) connect(replyChatID string, chat Chat, adminID int64, args []st
 		ChatType:         "manual",
 		CreatedByAdminID: adminID,
 	}
-	if _, err := h.Store.ConnectTelegramDestination(config.ProviderRailway, sourceID, destination, adminID); err != nil {
+	if _, err := h.Store.ConnectTelegramDestination(source.Provider, source.ID, destination, adminID); err != nil {
 		return err
 	}
 
-	projectName := sourceID
-	if project, ok := h.Store.KnownProject(config.ProviderRailway, sourceID); ok && project.Name != "" {
+	projectName := source.ID
+	if project, ok := h.Store.KnownProject(source.Provider, source.ID); ok && project.Name != "" {
 		projectName = project.Name
 	}
 
-	return h.reply(replyChatID, fmt.Sprintf("Connected %s to %s.", projectName, destinationLabel))
+	return h.reply(replyChatID, fmt.Sprintf("Connected %s %s to %s.", providerLabel(source.Provider), projectName, destinationLabel))
 }
 
 func (h Handler) disconnect(replyChatID string, chat Chat, args []string) error {
-	if len(args) < 2 {
-		return h.reply(replyChatID, "Usage: /disconnect <project_id> <chat_id>.")
+	source, ok := parseSourceArgs(args)
+	if !ok || len(source.Rest) < 1 {
+		return h.reply(replyChatID, "Usage: /disconnect <project_id> <chat_id> or /disconnect cf <worker_name> <chat_id>.")
 	}
 
-	sourceID := args[0]
-	chatID := args[1]
+	chatID := source.Rest[0]
 
-	removed, err := h.Store.DisconnectTelegramDestination(config.ProviderRailway, sourceID, chatID)
+	removed, err := h.Store.DisconnectTelegramDestination(source.Provider, source.ID, chatID)
 	if err != nil {
 		return err
 	}
@@ -309,10 +322,11 @@ func (h Handler) disconnect(replyChatID string, chat Chat, args []string) error 
 }
 
 func (h Handler) testRoute(chatID string, args []string) error {
-	if len(args) == 0 {
-		return h.reply(chatID, "Usage: /test <project_id>.")
+	source, ok := parseSourceArgs(args)
+	if !ok {
+		return h.reply(chatID, "Usage: /test <project_id> or /test cf <worker_name>.")
 	}
-	return h.dispatchTest(chatID, config.ProviderRailway, args[0])
+	return h.dispatchTest(chatID, source.Provider, source.ID)
 }
 
 func (h Handler) dispatchTest(replyChatID, provider, sourceID string) error {
@@ -337,6 +351,10 @@ func (h Handler) dispatchTest(replyChatID, provider, sourceID string) error {
 		Status:          "success",
 		CommitMessage:   "Telegram route test",
 		Test:            true,
+	}
+	if provider == config.ProviderCloudflare {
+		event.Type = "cf.workersBuilds.worker.build.succeeded"
+		event.CommitMessage = "Cloudflare Workers route test"
 	}
 	result := h.Dispatcher.DispatchTelegram(event)
 	if len(result.Errors) > 0 {
@@ -392,12 +410,75 @@ func helpText() string {
 Railway Assistant commands
 
 /status - show configuration status
-/projects - list Railway projects seen from webhooks
+/projects - list Railway projects and Cloudflare Workers seen from webhooks
 /routes - list configured routes
 /connect <project_id> <chat_id> [label] - connect a project to a Telegram chat
+/connect cf <worker_name> <chat_id> [label] - connect a Cloudflare Worker to a Telegram chat
 /disconnect <project_id> <chat_id> - remove a Telegram chat from a project
+/disconnect cf <worker_name> <chat_id> - remove a Telegram chat from a Cloudflare Worker
 /test <project_id> - send a test notification
+/test cf <worker_name> - send a Cloudflare test notification
 `)
+}
+
+type sourceArgs struct {
+	Provider string
+	ID       string
+	Rest     []string
+}
+
+func parseSourceArgs(args []string) (sourceArgs, bool) {
+	if len(args) == 0 {
+		return sourceArgs{}, false
+	}
+
+	provider := config.ProviderRailway
+	sourceID := args[0]
+	rest := args[1:]
+	if explicitProvider, ok := providerAlias(args[0]); ok {
+		if len(args) < 2 {
+			return sourceArgs{Provider: explicitProvider}, false
+		}
+		provider = explicitProvider
+		sourceID = args[1]
+		rest = args[2:]
+	}
+
+	if strings.TrimSpace(sourceID) == "" {
+		return sourceArgs{}, false
+	}
+
+	return sourceArgs{Provider: provider, ID: sourceID, Rest: rest}, true
+}
+
+func providerAlias(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "railway", "rw":
+		return config.ProviderRailway, true
+	case "cf", "cloudflare":
+		return config.ProviderCloudflare, true
+	default:
+		return "", false
+	}
+}
+
+func providerLabel(provider string) string {
+	switch provider {
+	case config.ProviderCloudflare:
+		return "Cloudflare Workers"
+	case config.ProviderRailway:
+		return "Railway"
+	default:
+		return provider
+	}
+}
+
+func groupProjectsByProvider(projects []config.KnownProject) map[string][]config.KnownProject {
+	grouped := map[string][]config.KnownProject{}
+	for _, project := range projects {
+		grouped[project.Provider] = append(grouped[project.Provider], project)
+	}
+	return grouped
 }
 
 func chatIDString(id int64) string {

@@ -91,7 +91,7 @@ func TestBotProjectsConnectRoutesDisconnectAndTest(t *testing.T) {
 	if len(sender.messages) < 6 {
 		t.Fatalf("messages len = %d, want at least 6", len(sender.messages))
 	}
-	if !strings.Contains(sender.messages[0].message.Text, "Known Railway projects") {
+	if !strings.Contains(sender.messages[0].message.Text, "Known sources") || !strings.Contains(sender.messages[0].message.Text, "Railway") {
 		t.Fatalf("/projects text = %q", sender.messages[0].message.Text)
 	}
 	if sender.messages[0].message.ReplyMarkup == nil {
@@ -135,6 +135,59 @@ func TestBotPrivateConnectWithExplicitChatID(t *testing.T) {
 	destinations := store.TelegramDestinations(config.ProviderRailway, "project-1")
 	if len(destinations) != 1 || destinations[0].ChatID != "-1001" {
 		t.Fatalf("destinations = %#v, want chat -1001", destinations)
+	}
+}
+
+func TestBotCloudflareProjectsConnectAndTest(t *testing.T) {
+	store := newBotTestStore(t)
+	if err := store.UpsertKnownProject(config.KnownProject{
+		ID:       "my-worker",
+		Provider: config.ProviderCloudflare,
+		Name:     "my-worker",
+	}); err != nil {
+		t.Fatalf("UpsertKnownProject() error = %v", err)
+	}
+
+	sender := &botTelegramSender{}
+	dispatcher := notifications.NewDispatcher(store, sender)
+	handler := Handler{
+		Store:      store,
+		Telegram:   sender,
+		Dispatcher: dispatcher,
+		Admins:     map[int64]bool{42: true},
+	}
+
+	updates := []Update{
+		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/projects"}},
+		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/connect cf my-worker -2001 Worker Builds"}},
+		{Message: &Message{From: &User{ID: 42}, Chat: Chat{ID: 100, Type: "private"}, Text: "/test cf my-worker"}},
+	}
+
+	for _, update := range updates {
+		if err := handler.HandleUpdate(update); err != nil {
+			t.Fatalf("HandleUpdate(%q) error = %v", update.Message.Text, err)
+		}
+	}
+
+	if !strings.Contains(sender.messages[0].message.Text, "Cloudflare Workers") {
+		t.Fatalf("/projects text = %q, want Cloudflare Workers group", sender.messages[0].message.Text)
+	}
+
+	destinations := store.TelegramDestinations(config.ProviderCloudflare, "my-worker")
+	if len(destinations) != 1 || destinations[0].ChatID != "-2001" {
+		t.Fatalf("destinations = %#v, want chat -2001", destinations)
+	}
+
+	var sentTest bool
+	for _, message := range sender.messages {
+		if message.chatID == "-2001" &&
+			strings.Contains(message.message.Text, "Cloudflare Workers Build") &&
+			strings.Contains(message.message.Text, "Cloudflare Workers route test") {
+			sentTest = true
+		}
+	}
+	if !sentTest {
+		t.Fatal("cloudflare test notification was not sent to connected destination")
 	}
 }
 

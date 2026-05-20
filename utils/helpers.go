@@ -13,8 +13,14 @@ func GetNotificationStatusEmoji(event types.NotificationEvent) string {
 	status := strings.ToUpper(event.Status)
 	severity := strings.ToUpper(event.Severity)
 
-	if status == "SUCCESS" {
+	if status == "SUCCESS" || status == "SUCCEEDED" {
 		return "🟢"
+	}
+	if status == "FAILED" || status == "FAILURE" {
+		return "🔴"
+	}
+	if status == "CANCELLED" || status == "CANCELED" {
+		return "🟠"
 	}
 
 	switch severity {
