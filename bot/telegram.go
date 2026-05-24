@@ -22,6 +22,8 @@ type Handler struct {
 	Admins     map[int64]bool
 }
 
+const unauthorizedBotMessage = "Всё хорошо"
+
 type Update struct {
 	UpdateID      int64          `json:"update_id"`
 	Message       *Message       `json:"message,omitempty"`
@@ -101,7 +103,7 @@ func (h Handler) handleMessage(message Message) error {
 	}
 	chatID := chatIDString(message.Chat.ID)
 	if !h.isAdmin(message.From.ID) {
-		return h.reply(chatID, "Unauthorized.")
+		return h.reply(chatID, unauthorizedBotMessage)
 	}
 
 	command, args, ok := parseCommand(message.Text)
@@ -135,8 +137,8 @@ func (h Handler) handleCallback(callback CallbackQuery) error {
 	}
 	chatID := chatIDString(callback.Message.Chat.ID)
 	if !h.isAdmin(callback.From.ID) {
-		_ = h.answerCallback(callback.ID, "Unauthorized")
-		return h.reply(chatID, "Unauthorized.")
+		_ = h.answerCallback(callback.ID, unauthorizedBotMessage)
+		return h.reply(chatID, unauthorizedBotMessage)
 	}
 
 	parts := strings.Split(callback.Data, "|")

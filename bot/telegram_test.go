@@ -50,8 +50,8 @@ func TestBotRejectsUnauthorizedUser(t *testing.T) {
 	if len(sender.messages) != 1 {
 		t.Fatalf("messages len = %d, want 1", len(sender.messages))
 	}
-	if !strings.Contains(sender.messages[0].message.Text, "Unauthorized") {
-		t.Fatalf("message text = %q, want unauthorized", sender.messages[0].message.Text)
+	if sender.messages[0].message.Text != unauthorizedBotMessage {
+		t.Fatalf("message text = %q, want %q", sender.messages[0].message.Text, unauthorizedBotMessage)
 	}
 }
 
