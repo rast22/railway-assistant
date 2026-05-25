@@ -30,7 +30,7 @@ func (s *botTelegramSender) AnswerCallbackQuery(callbackID, text string) error {
 	return nil
 }
 
-func TestBotRejectsUnauthorizedUser(t *testing.T) {
+func TestBotIgnoresUnauthorizedUser(t *testing.T) {
 	store := newBotTestStore(t)
 	sender := &botTelegramSender{}
 	handler := Handler{
@@ -47,11 +47,39 @@ func TestBotRejectsUnauthorizedUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleUpdate() error = %v", err)
 	}
-	if len(sender.messages) != 1 {
-		t.Fatalf("messages len = %d, want 1", len(sender.messages))
+	if len(sender.messages) != 0 {
+		t.Fatalf("messages len = %d, want 0", len(sender.messages))
 	}
-	if sender.messages[0].message.Text != unauthorizedBotMessage {
-		t.Fatalf("message text = %q, want %q", sender.messages[0].message.Text, unauthorizedBotMessage)
+	if len(sender.callbacks) != 0 {
+		t.Fatalf("callbacks len = %d, want 0", len(sender.callbacks))
+	}
+}
+
+func TestBotIgnoresUnauthorizedCallback(t *testing.T) {
+	store := newBotTestStore(t)
+	sender := &botTelegramSender{}
+	handler := Handler{
+		Store:    store,
+		Telegram: sender,
+		Admins:   map[int64]bool{42: true},
+	}
+
+	err := handler.HandleUpdate(Update{CallbackQuery: &CallbackQuery{
+		ID:   "callback-1",
+		From: User{ID: 7},
+		Message: &Message{
+			Chat: Chat{ID: 100, Type: "private"},
+		},
+		Data: "routes|railway|project-1",
+	}})
+	if err != nil {
+		t.Fatalf("HandleUpdate() error = %v", err)
+	}
+	if len(sender.messages) != 0 {
+		t.Fatalf("messages len = %d, want 0", len(sender.messages))
+	}
+	if len(sender.callbacks) != 0 {
+		t.Fatalf("callbacks len = %d, want 0", len(sender.callbacks))
 	}
 }
 
