@@ -166,6 +166,39 @@ func TestBotPrivateConnectWithExplicitChatID(t *testing.T) {
 	}
 }
 
+func TestBotConnectsTelegramTopicLink(t *testing.T) {
+	store := newBotTestStore(t)
+	sender := &botTelegramSender{}
+	handler := Handler{
+		Store:    store,
+		Telegram: sender,
+		Admins:   map[int64]bool{42: true},
+	}
+
+	err := handler.HandleUpdate(Update{Message: &Message{
+		From: &User{ID: 42},
+		Chat: Chat{ID: 100, Type: "private"},
+		Text: "/connect project-1 https://t.me/c/3963321501/4 Deploy Topic",
+	}})
+	if err != nil {
+		t.Fatalf("HandleUpdate() error = %v", err)
+	}
+
+	destinations := store.TelegramDestinations(config.ProviderRailway, "project-1")
+	if len(destinations) != 1 {
+		t.Fatalf("destinations len = %d, want 1", len(destinations))
+	}
+	if destinations[0].ChatID != "-1003963321501" {
+		t.Fatalf("ChatID = %q, want -1003963321501", destinations[0].ChatID)
+	}
+	if destinations[0].MessageThreadID != 4 {
+		t.Fatalf("MessageThreadID = %d, want 4", destinations[0].MessageThreadID)
+	}
+	if destinations[0].Label != "Deploy Topic" {
+		t.Fatalf("Label = %q, want Deploy Topic", destinations[0].Label)
+	}
+}
+
 func TestBotCloudflareProjectsConnectAndTest(t *testing.T) {
 	store := newBotTestStore(t)
 	if err := store.UpsertKnownProject(config.KnownProject{
@@ -240,7 +273,7 @@ func TestBotConnectRequiresExplicitChatID(t *testing.T) {
 	if destinations := store.TelegramDestinations(config.ProviderRailway, "project-1"); len(destinations) != 0 {
 		t.Fatalf("destinations = %#v, want none", destinations)
 	}
-	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0].message.Text, "/connect <project_id> <chat_id>") {
+	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0].message.Text, "/connect <project_id> <chat_id_or_topic_link>") {
 		t.Fatalf("usage reply = %#v", sender.messages)
 	}
 }

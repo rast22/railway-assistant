@@ -238,7 +238,7 @@ func (h Handler) sendRoutes(chatID string) error {
 	}
 	destinationLabels := map[string]string{}
 	for _, destination := range snap.TelegramDestinations {
-		destinationLabels[destination.ID] = fmt.Sprintf("%s (%s)", destination.Label, destination.ChatID)
+		destinationLabels[destination.ID] = fmt.Sprintf("%s (%s)", destination.Label, config.TelegramDestinationDisplay(destination.ChatID, destination.MessageThreadID))
 	}
 
 	var sb strings.Builder
@@ -275,20 +275,27 @@ func (h Handler) sendRoutes(chatID string) error {
 func (h Handler) connect(replyChatID string, chat Chat, adminID int64, args []string) error {
 	source, ok := parseSourceArgs(args)
 	if !ok || len(source.Rest) < 1 {
-		return h.reply(replyChatID, "Usage: /connect <project_id> <chat_id> [label] or /connect cf <worker_name> <chat_id> [label].")
+		return h.reply(replyChatID, "Usage: /connect <project_id> <chat_id_or_topic_link> [label] or /connect cf <worker_name> <chat_id_or_topic_link> [label].")
 	}
 
-	destinationChatID := source.Rest[0]
-	destinationLabel := "Chat " + destinationChatID
+	destinationChatID, messageThreadID, ok := config.ParseTelegramDestinationRef(source.Rest[0])
+	if !ok {
+		return h.reply(replyChatID, "Invalid Telegram chat id or topic link.")
+	}
+	destinationLabel := "Chat " + config.TelegramDestinationDisplay(destinationChatID, messageThreadID)
 	if len(source.Rest) > 1 {
 		destinationLabel = strings.Join(source.Rest[1:], " ")
 	}
 
 	destination := config.TelegramDestination{
 		ChatID:           destinationChatID,
+		MessageThreadID:  messageThreadID,
 		Label:            destinationLabel,
 		ChatType:         "manual",
 		CreatedByAdminID: adminID,
+	}
+	if messageThreadID > 0 {
+		destination.ChatType = "forum_topic"
 	}
 	if _, err := h.Store.ConnectTelegramDestination(source.Provider, source.ID, destination, adminID); err != nil {
 		return err
@@ -305,7 +312,7 @@ func (h Handler) connect(replyChatID string, chat Chat, adminID int64, args []st
 func (h Handler) disconnect(replyChatID string, chat Chat, args []string) error {
 	source, ok := parseSourceArgs(args)
 	if !ok || len(source.Rest) < 1 {
-		return h.reply(replyChatID, "Usage: /disconnect <project_id> <chat_id> or /disconnect cf <worker_name> <chat_id>.")
+		return h.reply(replyChatID, "Usage: /disconnect <project_id> <chat_id_or_topic_link> or /disconnect cf <worker_name> <chat_id_or_topic_link>.")
 	}
 
 	chatID := source.Rest[0]
@@ -411,10 +418,10 @@ Railway Assistant commands
 /status - show configuration status
 /projects - list Railway projects and Cloudflare Workers seen from webhooks
 /routes - list configured routes
-/connect <project_id> <chat_id> [label] - connect a project to a Telegram chat
-/connect cf <worker_name> <chat_id> [label] - connect a Cloudflare Worker to a Telegram chat
-/disconnect <project_id> <chat_id> - remove a Telegram chat from a project
-/disconnect cf <worker_name> <chat_id> - remove a Telegram chat from a Cloudflare Worker
+/connect <project_id> <chat_id_or_topic_link> [label] - connect a project to a Telegram chat or topic
+/connect cf <worker_name> <chat_id_or_topic_link> [label] - connect a Cloudflare Worker to a Telegram chat or topic
+/disconnect <project_id> <chat_id_or_topic_link> - remove a Telegram chat or topic from a project
+/disconnect cf <worker_name> <chat_id_or_topic_link> - remove a Telegram chat or topic from a Cloudflare Worker
 /test <project_id> - send a test notification
 /test cf <worker_name> - send a Cloudflare test notification
 `)

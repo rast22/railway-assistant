@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +65,7 @@ type Route struct {
 type TelegramDestination struct {
 	ID               string    `json:"id"`
 	ChatID           string    `json:"chat_id"`
+	MessageThreadID  int       `json:"message_thread_id,omitempty"`
 	Label            string    `json:"label"`
 	ChatType         string    `json:"chat_type"`
 	Enabled          bool      `json:"enabled"`
@@ -224,7 +227,14 @@ func (s *Store) ConnectTelegramDestination(provider, sourceID string, destinatio
 	}
 
 	sourceID = strings.TrimSpace(sourceID)
-	destination.ChatID = strings.TrimSpace(destination.ChatID)
+	if chatID, messageThreadID, ok := ParseTelegramDestinationRef(destination.ChatID); ok {
+		destination.ChatID = chatID
+		if destination.MessageThreadID == 0 {
+			destination.MessageThreadID = messageThreadID
+		}
+	} else {
+		destination.ChatID = strings.TrimSpace(destination.ChatID)
+	}
 	if provider == "" {
 		provider = ProviderRailway
 	}
@@ -237,10 +247,10 @@ func (s *Store) ConnectTelegramDestination(provider, sourceID string, destinatio
 
 	now := time.Now().UTC()
 	if destination.ID == "" {
-		destination.ID = TelegramDestinationID(destination.ChatID)
+		destination.ID = TelegramDestinationID(destination.ChatID, destination.MessageThreadID)
 	}
 	if destination.Label == "" {
-		destination.Label = destination.ChatID
+		destination.Label = TelegramDestinationDisplay(destination.ChatID, destination.MessageThreadID)
 	}
 	if destination.CreatedAt.IsZero() {
 		destination.CreatedAt = now
@@ -294,7 +304,8 @@ func (s *Store) DisconnectTelegramDestination(provider, sourceID, chatID string)
 		provider = ProviderRailway
 	}
 	routeID := RouteID(provider, strings.TrimSpace(sourceID))
-	destinationID := TelegramDestinationID(strings.TrimSpace(chatID))
+	destinationChatID, messageThreadID, _ := ParseTelegramDestinationRef(chatID)
+	destinationID := TelegramDestinationID(destinationChatID, messageThreadID)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -374,12 +385,72 @@ func KnownProjectKey(provider, sourceID string) string {
 	return RouteID(provider, sourceID)
 }
 
-func TelegramDestinationID(chatID string) string {
+func TelegramDestinationID(chatID string, messageThreadIDs ...int) string {
 	chatID = strings.TrimSpace(chatID)
 	if chatID == "" {
 		return ""
 	}
-	return ProviderTelegram + ":" + chatID
+	id := ProviderTelegram + ":" + chatID
+	if len(messageThreadIDs) > 0 && messageThreadIDs[0] > 0 {
+		id += ":thread:" + strconv.Itoa(messageThreadIDs[0])
+	}
+	return id
+}
+
+func ParseTelegramDestinationRef(raw string) (string, int, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", 0, false
+	}
+
+	if strings.HasPrefix(value, "https://t.me/") || strings.HasPrefix(value, "http://t.me/") ||
+		strings.HasPrefix(value, "https://telegram.me/") || strings.HasPrefix(value, "http://telegram.me/") {
+		parsed, err := url.Parse(value)
+		if err != nil {
+			return "", 0, false
+		}
+		parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+		if len(parts) >= 3 && parts[0] == "c" {
+			threadID, err := strconv.Atoi(parts[2])
+			if err != nil || threadID <= 0 || strings.TrimSpace(parts[1]) == "" {
+				return "", 0, false
+			}
+			return "-100" + strings.TrimSpace(parts[1]), threadID, true
+		}
+		if len(parts) >= 1 && validTelegramUsernamePath(parts[0]) {
+			chatID := "@" + parts[0]
+			if len(parts) >= 2 {
+				threadID, err := strconv.Atoi(parts[1])
+				if err == nil && threadID > 0 {
+					return chatID, threadID, true
+				}
+			}
+			return chatID, 0, true
+		}
+		return "", 0, false
+	}
+
+	if before, after, ok := strings.Cut(value, "/"); ok {
+		threadID, err := strconv.Atoi(strings.TrimSpace(after))
+		if err == nil && threadID > 0 && strings.TrimSpace(before) != "" {
+			return strings.TrimSpace(before), threadID, true
+		}
+	}
+
+	return value, 0, true
+}
+
+func validTelegramUsernamePath(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && !strings.HasPrefix(value, "+") && value != "joinchat"
+}
+
+func TelegramDestinationDisplay(chatID string, messageThreadID int) string {
+	chatID = strings.TrimSpace(chatID)
+	if messageThreadID <= 0 {
+		return chatID
+	}
+	return fmt.Sprintf("%s topic %d", chatID, messageThreadID)
 }
 
 func (s *Store) load() error {

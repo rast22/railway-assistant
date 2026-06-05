@@ -17,11 +17,12 @@ import (
 const telegramHTTPTimeout = 35 * time.Second
 
 type TelegramMessage struct {
-	Text        string
-	ParseMode   string
-	ButtonText  string
-	ButtonURL   string
-	ReplyMarkup interface{}
+	Text            string
+	ParseMode       string
+	ButtonText      string
+	ButtonURL       string
+	MessageThreadID int
+	ReplyMarkup     interface{}
 }
 
 type TelegramSender interface {
@@ -77,6 +78,9 @@ func (api *TelegramAPI) SendMessage(chatID string, message TelegramMessage) erro
 		"chat_id":              chatID,
 		"text":                 message.Text,
 		"link_preview_options": map[string]bool{"is_disabled": true},
+	}
+	if message.MessageThreadID > 0 {
+		payload["message_thread_id"] = message.MessageThreadID
 	}
 	parseMode := message.ParseMode
 	if parseMode == "" {

@@ -101,7 +101,8 @@ Control what information appears in your alerts by setting these to `true` or `f
     - If `RAILWAY_WEBHOOK_TOKEN` is set, use `https://<YOUR_SERVICE_URL>/railway/alerts?token=<TOKEN>&project_id=<PROJECT_ID>` or configure the `X-Railway-Webhook-Token` header.
     - **Event Types**: Select the events you want to be notified about.
 6.  Trigger Railway's test webhook, then send `/projects` to the bot. The test button is sent from Railway's browser UI, so use the `?token=...` URL form when testing with `RAILWAY_WEBHOOK_TOKEN`.
-7.  In private chat with the bot, run `/connect <project_id> <chat_id> [label]` for each project/chat pair.
+7.  In private chat with the bot, run `/connect <project_id> <chat_id_or_topic_link> [label]` for each project/chat pair.
+    - Telegram forum topic links are supported, for example `https://t.me/c/3963321501/4`.
 8.  Run `/test <project_id>` to verify delivery.
 
 ### 5. Cloudflare Workers Builds
@@ -150,10 +151,10 @@ Bot commands:
 | `/status` | Show config path and counts. |
 | `/projects` | List Railway projects and Cloudflare Workers seen from webhooks. |
 | `/routes` | List configured routes. |
-| `/connect <project_id> <chat_id> [label]` | Connect a Railway project to a Telegram chat/channel. |
-| `/connect cf <worker_name> <chat_id> [label]` | Connect a Cloudflare Worker to a Telegram chat/channel. |
-| `/disconnect <project_id> <chat_id>` | Remove a Telegram chat/channel from a project route. |
-| `/disconnect cf <worker_name> <chat_id>` | Remove a Telegram chat/channel from a Cloudflare Worker route. |
+| `/connect <project_id> <chat_id_or_topic_link> [label]` | Connect a Railway project to a Telegram chat/channel/topic. |
+| `/connect cf <worker_name> <chat_id_or_topic_link> [label]` | Connect a Cloudflare Worker to a Telegram chat/channel/topic. |
+| `/disconnect <project_id> <chat_id_or_topic_link>` | Remove a Telegram chat/channel/topic from a project route. |
+| `/disconnect cf <worker_name> <chat_id_or_topic_link>` | Remove a Telegram chat/channel/topic from a Cloudflare Worker route. |
 | `/test <project_id>` | Send a test notification through the route. |
 | `/test cf <worker_name>` | Send a Cloudflare test notification through the route. |
 

@@ -53,6 +53,74 @@ func TestStorePersistsProjectsRoutesAndDestinations(t *testing.T) {
 	}
 }
 
+func TestStorePersistsTelegramTopicDestination(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	store, err := NewStore(path)
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+
+	_, err = store.ConnectTelegramDestination(ProviderRailway, "project-1", TelegramDestination{
+		ChatID: "https://t.me/c/3963321501/4",
+		Label:  "Deployments Topic",
+	}, 42)
+	if err != nil {
+		t.Fatalf("ConnectTelegramDestination() error = %v", err)
+	}
+
+	reloaded, err := NewStore(path)
+	if err != nil {
+		t.Fatalf("reload NewStore() error = %v", err)
+	}
+
+	destinations := reloaded.TelegramDestinations(ProviderRailway, "project-1")
+	if len(destinations) != 1 {
+		t.Fatalf("TelegramDestinations() len = %d, want 1", len(destinations))
+	}
+	if destinations[0].ChatID != "-1003963321501" {
+		t.Fatalf("destination ChatID = %q, want -1003963321501", destinations[0].ChatID)
+	}
+	if destinations[0].MessageThreadID != 4 {
+		t.Fatalf("destination MessageThreadID = %d, want 4", destinations[0].MessageThreadID)
+	}
+	if destinations[0].ID != "telegram:-1003963321501:thread:4" {
+		t.Fatalf("destination ID = %q, want telegram:-1003963321501:thread:4", destinations[0].ID)
+	}
+}
+
+func TestParseTelegramDestinationRef(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		chatID   string
+		threadID int
+		ok       bool
+	}{
+		{name: "plain chat", input: "-1001", chatID: "-1001", ok: true},
+		{name: "private forum topic link", input: "https://t.me/c/3963321501/4", chatID: "-1003963321501", threadID: 4, ok: true},
+		{name: "public chat link", input: "https://t.me/deployments", chatID: "@deployments", ok: true},
+		{name: "public forum topic link", input: "https://t.me/deployments/4", chatID: "@deployments", threadID: 4, ok: true},
+		{name: "plain chat and topic", input: "-1003963321501/4", chatID: "-1003963321501", threadID: 4, ok: true},
+		{name: "invite link", input: "https://t.me/+abcdef", ok: false},
+		{name: "blank", input: "", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatID, threadID, ok := ParseTelegramDestinationRef(tt.input)
+			if ok != tt.ok {
+				t.Fatalf("ok = %t, want %t", ok, tt.ok)
+			}
+			if chatID != tt.chatID {
+				t.Fatalf("chatID = %q, want %q", chatID, tt.chatID)
+			}
+			if threadID != tt.threadID {
+				t.Fatalf("threadID = %d, want %d", threadID, tt.threadID)
+			}
+		})
+	}
+}
+
 func TestStoreDisconnectRemovesRoute(t *testing.T) {
 	store, err := NewStore(filepath.Join(t.TempDir(), "config.json"))
 	if err != nil {

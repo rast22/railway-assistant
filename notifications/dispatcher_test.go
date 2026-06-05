@@ -109,6 +109,33 @@ func TestDispatcherUsesLegacyFallbackWithoutConfigStore(t *testing.T) {
 	}
 }
 
+func TestDispatcherSendsTelegramTopicMessages(t *testing.T) {
+	t.Setenv("TELEGRAM_CHAT_ID", "")
+	store, err := config.NewStore(filepath.Join(t.TempDir(), "config.json"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	if _, err := store.ConnectTelegramDestination(config.ProviderRailway, "project-1", config.TelegramDestination{
+		ChatID:          "-1003963321501",
+		MessageThreadID: 4,
+	}, 42); err != nil {
+		t.Fatalf("ConnectTelegramDestination() error = %v", err)
+	}
+
+	sender := &fakeTelegramSender{}
+	result := NewDispatcher(store, sender).DispatchTelegram(testEvent("project-1"))
+
+	if result.Sent != 1 {
+		t.Fatalf("Sent = %d, want 1", result.Sent)
+	}
+	if got := sender.chats(); len(got) != 1 || got[0] != "-1003963321501" {
+		t.Fatalf("sent chats = %#v, want [-1003963321501]", got)
+	}
+	if sender.messages[0].message.MessageThreadID != 4 {
+		t.Fatalf("MessageThreadID = %d, want 4", sender.messages[0].message.MessageThreadID)
+	}
+}
+
 func TestDispatcherSkipsDisabledRoutesAndDestinations(t *testing.T) {
 	t.Setenv("TELEGRAM_CHAT_ID", "")
 	path := filepath.Join(t.TempDir(), "config.json")

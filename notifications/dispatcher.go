@@ -62,7 +62,9 @@ func (d *Dispatcher) DispatchTelegram(event types.NotificationEvent) DispatchRes
 	}
 
 	for _, destination := range destinations {
-		if err := d.Telegram.SendMessage(destination.ChatID, outgoing); err != nil {
+		destinationMessage := outgoing
+		destinationMessage.MessageThreadID = destination.MessageThreadID
+		if err := d.Telegram.SendMessage(destination.ChatID, destinationMessage); err != nil {
 			result.Errors = append(result.Errors, err)
 			log.Printf("failed to send telegram message to %s: %v", destination.ChatID, err)
 			continue
